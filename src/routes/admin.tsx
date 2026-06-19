@@ -28,6 +28,9 @@ function AdminPage() {
 }
 
 function LoginForm() {
+  
+  console.log("URL:", process.env.SUPABASE_URL);
+  console.log("PUB:", process.env.SUPABASE_PUBLISHABLE_KEY);
   const qc = useQueryClient();
   const login = useServerFn(adminLogin);
   const [username, setUsername] = useState("");
