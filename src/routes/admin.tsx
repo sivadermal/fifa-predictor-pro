@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { listMatches as listMatchesFn } from "@/lib/predictions.functions";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — FIFA Winner Predictor" }, { name: "robots", content: "noindex" }] }),
@@ -90,10 +91,7 @@ function AdminShell() {
 
 function MatchesTab() {
   const qc = useQueryClient();
-  const list = useServerFn((await import("@/lib/predictions.functions")).listMatches as any);
-  void list;
-  // Use direct import to avoid await above; reload via server fn directly:
-  const listMatches = useServerFn(require("@/lib/predictions.functions").listMatches);
+  const listMatches = useServerFn(listMatchesFn);
   const matches = useQuery({ queryKey: ["admin-matches"], queryFn: () => listMatches() });
 
   const create = useServerFn(adminCreateMatch);
@@ -177,7 +175,7 @@ function MatchesTab() {
 
 function ResultsTab() {
   const qc = useQueryClient();
-  const listMatches = useServerFn(require("@/lib/predictions.functions").listMatches);
+  const listMatches = useServerFn(listMatchesFn);
   const matches = useQuery({ queryKey: ["admin-matches"], queryFn: () => listMatches() });
   const setResult = useServerFn(adminSetResult);
   const recalc = useServerFn(adminRecalculate);
