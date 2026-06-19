@@ -14,10 +14,147 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_users: {
+        Row: {
+          created_at: string
+          device_id: string
+          disabled: boolean
+          id: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          disabled?: boolean
+          id?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          disabled?: boolean
+          id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      matches: {
+        Row: {
+          competition: string
+          created_at: string
+          id: string
+          kickoff: string
+          status: string
+          team1: string
+          team1_flag: string | null
+          team1_score: number | null
+          team2: string
+          team2_flag: string | null
+          team2_score: number | null
+          updated_at: string
+          winner: string | null
+        }
+        Insert: {
+          competition?: string
+          created_at?: string
+          id?: string
+          kickoff: string
+          status?: string
+          team1: string
+          team1_flag?: string | null
+          team1_score?: number | null
+          team2: string
+          team2_flag?: string | null
+          team2_score?: number | null
+          updated_at?: string
+          winner?: string | null
+        }
+        Update: {
+          competition?: string
+          created_at?: string
+          id?: string
+          kickoff?: string
+          status?: string
+          team1?: string
+          team1_flag?: string | null
+          team1_score?: number | null
+          team2?: string
+          team2_flag?: string | null
+          team2_score?: number | null
+          updated_at?: string
+          winner?: string | null
+        }
+        Relationships: []
+      }
+      predictions: {
+        Row: {
+          created_at: string
+          id: string
+          is_correct: boolean | null
+          match_id: string
+          pick: string
+          points: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_correct?: boolean | null
+          match_id: string
+          pick: string
+          points?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_correct?: boolean | null
+          match_id?: string
+          pick?: string
+          points?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      leaderboard: {
+        Row: {
+          accuracy: number | null
+          correct_predictions: number | null
+          rank: number | null
+          total_points: number | null
+          total_predictions: number | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
