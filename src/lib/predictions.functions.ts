@@ -1,73 +1,56 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-function getAdmin() {
-  // Use service-role client; predictions/app_users have no public policies.
-  return import("@/integrations/supabase/client.server").then((m) => m.supabaseAdmin);
+function publicClient() {
+  return createClient<Database>(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
+  );
 }
 
-const usernameSchema = z
-  .string()
-  .trim()
-  .min(2, "Username must be at least 2 characters")
-  .max(24, "Username must be at most 24 characters")
-  .regex(/^[a-zA-Z0-9_\- .]+$/, "Only letters, numbers, _, -, . and spaces");
+export const listMatches = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("matches")
+    .select("*")
+    .order("kickoff", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+});
 
-const deviceSchema = z.string().min(8).max(128);
+export const getLeaderboard = createServerFn({ method: "GET" }).handler(async () => {
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("leaderboard")
+    .select("*")
+    .order("rank", { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return data ?? [];
+});
 
-export const registerUser = createServerFn({ method: "POST" })
-  .inputValidator((input) =>
-    z.object({ username: usernameSchema, deviceId: deviceSchema }).parse(input),
-  )
-  .handler(async ({ data }) => {
-    const supabase = await getAdmin();
-    // Existing device?
-    const { data: existing } = await supabase
-      .from("app_users")
-      .select("id, username, disabled")
-      .eq("device_id", data.deviceId)
+export const getMe = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, user_id, name, disabled, created_at")
+      .eq("id", userId)
       .maybeSingle();
-    if (existing) {
-      return { id: existing.id, username: existing.username, disabled: existing.disabled, isNew: false };
-    }
-    // Username taken?
-    const { data: taken } = await supabase
-      .from("app_users")
-      .select("id")
-      .ilike("username", data.username)
-      .maybeSingle();
-    if (taken) {
-      throw new Error("USERNAME_TAKEN");
-    }
-    const { data: created, error } = await supabase
-      .from("app_users")
-      .insert({ username: data.username, device_id: data.deviceId })
-      .select("id, username, disabled")
-      .single();
-    if (error) {
-      if (error.message.toLowerCase().includes("duplicate")) throw new Error("USERNAME_TAKEN");
-      throw error;
-    }
-    return { id: created.id, username: created.username, disabled: created.disabled, isNew: true };
-  });
-
-export const getMe = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ deviceId: deviceSchema }).parse(input))
-  .handler(async ({ data }) => {
-    const supabase = await getAdmin();
-    const { data: user } = await supabase
-      .from("app_users")
-      .select("id, username, disabled, created_at")
-      .eq("device_id", data.deviceId)
-      .maybeSingle();
-    if (!user) return null;
+    if (error) throw error;
+    if (!profile) return null;
     const { data: lb } = await supabase
       .from("leaderboard")
       .select("total_points, correct_predictions, total_predictions, accuracy, rank")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
     return {
-      ...user,
+      ...profile,
       total_points: lb?.total_points ?? 0,
       correct_predictions: lb?.correct_predictions ?? 0,
       total_predictions: lb?.total_predictions ?? 0,
@@ -76,54 +59,38 @@ export const getMe = createServerFn({ method: "POST" })
     };
   });
 
-export const listMatches = createServerFn({ method: "GET" }).handler(async () => {
-  const supabase = await getAdmin();
-  const { data, error } = await supabase
-    .from("matches")
-    .select("*")
-    .order("kickoff", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
-});
-
-export const getMyPredictions = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ deviceId: deviceSchema }).parse(input))
-  .handler(async ({ data }) => {
-    const supabase = await getAdmin();
-    const { data: user } = await supabase
-      .from("app_users")
-      .select("id")
-      .eq("device_id", data.deviceId)
-      .maybeSingle();
-    if (!user) return [];
-    const { data: preds, error } = await supabase
+export const getMyPredictions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
       .from("predictions")
       .select("id, match_id, pick, is_correct, points, created_at")
-      .eq("user_id", user.id);
+      .eq("user_id", context.userId);
     if (error) throw error;
-    return preds ?? [];
+    return data ?? [];
   });
 
 export const submitPrediction = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
     z
       .object({
-        deviceId: deviceSchema,
         matchId: z.string().uuid(),
         pick: z.enum(["team1", "draw", "team2"]),
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
-    const supabase = await getAdmin();
-    const { data: user } = await supabase
-      .from("app_users")
-      .select("id, disabled")
-      .eq("device_id", data.deviceId)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("disabled")
+      .eq("id", context.userId)
       .maybeSingle();
-    if (!user) throw new Error("USER_NOT_FOUND");
-    if (user.disabled) throw new Error("USER_DISABLED");
-    const { data: match } = await supabase
+    if (!profile) throw new Error("NO_PROFILE");
+    if (profile.disabled) throw new Error("USER_DISABLED");
+
+    const { data: match } = await supabaseAdmin
       .from("matches")
       .select("id, kickoff, status")
       .eq("id", data.matchId)
@@ -131,28 +98,18 @@ export const submitPrediction = createServerFn({ method: "POST" })
     if (!match) throw new Error("MATCH_NOT_FOUND");
     if (match.status === "cancelled") throw new Error("MATCH_CANCELLED");
     if (match.status === "completed") throw new Error("MATCH_COMPLETED");
+
     const kickoffMs = new Date(match.kickoff).getTime();
     const now = Date.now();
     if (now >= kickoffMs) throw new Error("PREDICTION_CLOSED");
     if (kickoffMs - now > 24 * 60 * 60 * 1000) throw new Error("PREDICTION_NOT_OPEN");
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("predictions")
       .upsert(
-        { user_id: user.id, match_id: match.id, pick: data.pick },
+        { user_id: context.userId, match_id: match.id, pick: data.pick },
         { onConflict: "match_id,user_id" },
       );
     if (error) throw error;
     return { ok: true };
   });
-
-export const getLeaderboard = createServerFn({ method: "GET" }).handler(async () => {
-  const supabase = await getAdmin();
-  const { data, error } = await supabase
-    .from("leaderboard")
-    .select("*")
-    .order("rank", { ascending: true })
-    .limit(200);
-  if (error) throw error;
-  return data ?? [];
-});

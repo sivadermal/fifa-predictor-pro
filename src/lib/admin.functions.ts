@@ -43,7 +43,7 @@ const matchInput = z.object({
   team2: z.string().min(1).max(64),
   team2_flag: z.string().max(8).optional().nullable(),
   competition: z.string().min(1).max(64),
-  kickoff: z.string(), // ISO
+  kickoff: z.string(),
   status: z.enum(["upcoming", "live", "completed", "cancelled"]).optional(),
 });
 
@@ -51,8 +51,8 @@ export const adminCreateMatch = createServerFn({ method: "POST" })
   .inputValidator((input) => matchInput.parse(input))
   .handler(async ({ data }) => {
     await requireAdmin();
-    const supabase = await getAdmin();
-    const { data: row, error } = await supabase.from("matches").insert(data).select("*").single();
+    const sb = await getAdmin();
+    const { data: row, error } = await sb.from("matches").insert(data).select("*").single();
     if (error) throw error;
     return row;
   });
@@ -63,8 +63,8 @@ export const adminUpdateMatch = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin();
-    const supabase = await getAdmin();
-    const { data: row, error } = await supabase
+    const sb = await getAdmin();
+    const { data: row, error } = await sb
       .from("matches")
       .update(data.patch)
       .eq("id", data.id)
@@ -78,8 +78,8 @@ export const adminDeleteMatch = createServerFn({ method: "POST" })
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     await requireAdmin();
-    const supabase = await getAdmin();
-    const { error } = await supabase.from("matches").delete().eq("id", data.id);
+    const sb = await getAdmin();
+    const { error } = await sb.from("matches").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -96,14 +96,14 @@ export const adminSetResult = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin();
-    const supabase = await getAdmin();
+    const sb = await getAdmin();
     const winner: "team1" | "draw" | "team2" =
       data.team1_score > data.team2_score
         ? "team1"
         : data.team1_score < data.team2_score
           ? "team2"
           : "draw";
-    const { error: e1 } = await supabase
+    const { error: e1 } = await sb
       .from("matches")
       .update({
         team1_score: data.team1_score,
@@ -113,15 +113,14 @@ export const adminSetResult = createServerFn({ method: "POST" })
       })
       .eq("id", data.id);
     if (e1) throw e1;
-    // Recalculate predictions for this match
-    const { data: preds, error: e2 } = await supabase
+    const { data: preds, error: e2 } = await sb
       .from("predictions")
       .select("id, pick")
       .eq("match_id", data.id);
     if (e2) throw e2;
     for (const p of preds ?? []) {
       const correct = p.pick === winner;
-      await supabase
+      await sb
         .from("predictions")
         .update({ is_correct: correct, points: correct ? 1 : 0 })
         .eq("id", p.id);
@@ -131,21 +130,18 @@ export const adminSetResult = createServerFn({ method: "POST" })
 
 export const adminRecalculate = createServerFn({ method: "POST" }).handler(async () => {
   await requireAdmin();
-  const supabase = await getAdmin();
-  const { data: matches } = await supabase
+  const sb = await getAdmin();
+  const { data: matches } = await sb
     .from("matches")
     .select("id, winner, status")
     .eq("status", "completed");
   let total = 0;
   for (const m of matches ?? []) {
     if (!m.winner) continue;
-    const { data: preds } = await supabase
-      .from("predictions")
-      .select("id, pick")
-      .eq("match_id", m.id);
+    const { data: preds } = await sb.from("predictions").select("id, pick").eq("match_id", m.id);
     for (const p of preds ?? []) {
       const correct = p.pick === m.winner;
-      await supabase
+      await sb
         .from("predictions")
         .update({ is_correct: correct, points: correct ? 1 : 0 })
         .eq("id", p.id);
@@ -157,18 +153,19 @@ export const adminRecalculate = createServerFn({ method: "POST" }).handler(async
 
 export const adminListUsers = createServerFn({ method: "GET" }).handler(async () => {
   await requireAdmin();
-  const supabase = await getAdmin();
-  const { data: users, error } = await supabase
-    .from("app_users")
-    .select("id, username, device_id, disabled, created_at")
+  const sb = await getAdmin();
+  const { data: users, error } = await sb
+    .from("profiles")
+    .select("id, user_id, name, disabled, created_at")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  const { data: lb } = await supabase.from("leaderboard").select("*");
+  const { data: lb } = await sb.from("leaderboard").select("*");
   const map = new Map((lb ?? []).map((r) => [r.user_id, r]));
   return (users ?? []).map((u) => ({
     ...u,
     total_points: map.get(u.id)?.total_points ?? 0,
     total_predictions: map.get(u.id)?.total_predictions ?? 0,
+    correct_predictions: map.get(u.id)?.correct_predictions ?? 0,
   }));
 });
 
@@ -178,20 +175,74 @@ export const adminToggleUser = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin();
-    const supabase = await getAdmin();
-    const { error } = await supabase.from("app_users").update({ disabled: data.disabled }).eq("id", data.id);
+    const sb = await getAdmin();
+    const { error } = await sb.from("profiles").update({ disabled: data.disabled }).eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
 
+export const adminAdjustPoints = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        delta: z.number().int().min(-1000).max(1000),
+        reason: z.string().max(200).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const sb = await getAdmin();
+    const { error } = await sb.from("point_adjustments").insert({
+      user_id: data.userId,
+      delta: data.delta,
+      reason: data.reason ?? null,
+    });
+    if (error) throw error;
+    return { ok: true };
+  });
+
+export const adminListAdjustments = createServerFn({ method: "GET" })
+  .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const sb = await getAdmin();
+    const { data: rows, error } = await sb
+      .from("point_adjustments")
+      .select("id, delta, reason, created_at")
+      .eq("user_id", data.userId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return rows ?? [];
+  });
+
 export const adminListPredictions = createServerFn({ method: "GET" }).handler(async () => {
   await requireAdmin();
-  const supabase = await getAdmin();
-  const { data, error } = await supabase
+  const sb = await getAdmin();
+  const { data: preds, error } = await sb
     .from("predictions")
     .select("id, match_id, user_id, pick, is_correct, points, created_at")
     .order("created_at", { ascending: false })
     .limit(2000);
   if (error) throw error;
-  return data ?? [];
+  const { data: profiles } = await sb.from("profiles").select("id, user_id, name");
+  const { data: matches } = await sb.from("matches").select("id, team1, team2");
+  const pMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const mMap = new Map((matches ?? []).map((m) => [m.id, m]));
+  return (preds ?? []).map((p) => ({
+    ...p,
+    profile: pMap.get(p.user_id) ?? null,
+    match: mMap.get(p.match_id) ?? null,
+  }));
 });
+
+export const adminDeleteUser = createServerFn({ method: "POST" })
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const sb = await getAdmin();
+    const { error } = await sb.auth.admin.deleteUser(data.id);
+    if (error) throw error;
+    return { ok: true };
+  });

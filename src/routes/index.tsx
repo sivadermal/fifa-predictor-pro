@@ -9,9 +9,7 @@ import {
   submitPrediction,
 } from "@/lib/predictions.functions";
 import { Countdown } from "@/components/countdown";
-import { UsernameGate, useProfile } from "@/components/username-gate";
-import { getDeviceId } from "@/lib/device";
-import { Button } from "@/components/ui/button";
+import { AuthGate } from "@/components/auth-gate";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/")({
@@ -43,26 +41,18 @@ type Match = {
 type Pred = { id: string; match_id: string; pick: "team1" | "draw" | "team2"; is_correct: boolean | null; points: number };
 
 function HomePage() {
-  const { profile, setProfile, ready } = useProfile();
-
-  return ready ? (
-    <UsernameGate profile={profile} onRegistered={setProfile}>
-      <Dashboard profileId={profile?.id ?? null} />
-    </UsernameGate>
-  ) : (
-    <div className="py-20 text-center text-muted-foreground">Loading…</div>
+  return (
+    <AuthGate>
+      <Dashboard />
+    </AuthGate>
   );
 }
 
-function Dashboard({ profileId }: { profileId: string | null }) {
+function Dashboard() {
   const fetchMatches = useServerFn(listMatches);
   const fetchPreds = useServerFn(getMyPredictions);
   const matches = useQuery({ queryKey: ["matches"], queryFn: () => fetchMatches(), refetchInterval: 30000 });
-  const myPreds = useQuery({
-    queryKey: ["my-preds", profileId],
-    queryFn: () => fetchPreds({ data: { deviceId: getDeviceId() } }),
-    enabled: !!profileId,
-  });
+  const myPreds = useQuery({ queryKey: ["my-preds"], queryFn: () => fetchPreds() });
 
   const predMap = useMemo(() => {
     const m = new Map<string, Pred>();
@@ -111,10 +101,7 @@ function Dashboard({ profileId }: { profileId: string | null }) {
 }
 
 function Section({
-  title,
-  matches,
-  predMap,
-  state,
+  title, matches, predMap, state,
 }: {
   title: string;
   matches: Match[];
@@ -138,9 +125,7 @@ function Section({
 }
 
 function MatchCard({
-  match,
-  pick,
-  state,
+  match, pick, state,
 }: {
   match: Match;
   pick?: Pred;
@@ -152,8 +137,7 @@ function MatchCard({
   const current = local ?? pick?.pick;
 
   const mut = useMutation({
-    mutationFn: (p: Pred["pick"]) =>
-      submit({ data: { deviceId: getDeviceId(), matchId: match.id, pick: p } }),
+    mutationFn: (p: Pred["pick"]) => submit({ data: { matchId: match.id, pick: p } }),
     onSuccess: (_d, p) => {
       setLocal(p);
       toast.success("Prediction saved");
@@ -166,7 +150,7 @@ function MatchCard({
         MATCH_COMPLETED: "Match is already completed.",
         MATCH_CANCELLED: "Match was cancelled.",
         USER_DISABLED: "Your account has been disabled.",
-        USER_NOT_FOUND: "Please refresh and try again.",
+        NO_PROFILE: "Profile not found. Please sign out and back in.",
       };
       toast.error(map[err.message] ?? err.message);
     },
@@ -178,9 +162,7 @@ function MatchCard({
   return (
     <div className="pitch-card overflow-hidden">
       <div className="flex items-center justify-between px-5 pt-4">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {match.competition}
-        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{match.competition}</span>
         <StatusBadge state={state} />
       </div>
 
@@ -236,24 +218,18 @@ function MatchCard({
 
 function TeamSide({ name, flag, align, score }: { name: string; flag: string | null; align: "left" | "right"; score: number | null }) {
   return (
-    <div className={`flex items-center gap-3 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
-      <div className="grid h-12 w-12 place-items-center rounded-full bg-secondary text-2xl">{flag || "🏳️"}</div>
-      <div>
-        <div className="font-semibold leading-tight">{name}</div>
+    <div className={`flex min-w-0 items-center gap-3 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-secondary text-2xl">{flag || "🏳️"}</div>
+      <div className="min-w-0">
+        <div className="truncate font-semibold leading-tight">{name}</div>
         {score !== null && <div className="text-xs text-muted-foreground">scored {score}</div>}
       </div>
     </div>
   );
 }
 
-function PickButton({
-  label, active, disabled, onClick, correct,
-}: {
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-  correct?: boolean | null;
+function PickButton({ label, active, disabled, onClick, correct }: {
+  label: string; active?: boolean; disabled?: boolean; onClick?: () => void; correct?: boolean | null;
 }) {
   const tone =
     correct === true
@@ -285,6 +261,3 @@ function StatusBadge({ state }: { state: "open" | "live" | "upcoming" | "complet
   const s = map[state];
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${s.cls}`}>{s.text}</span>;
 }
-
-// Unused but referenced previously
-void Button;
