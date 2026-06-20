@@ -14,30 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      app_users: {
-        Row: {
-          created_at: string
-          device_id: string
-          disabled: boolean
-          id: string
-          username: string
-        }
-        Insert: {
-          created_at?: string
-          device_id: string
-          disabled?: boolean
-          id?: string
-          username: string
-        }
-        Update: {
-          created_at?: string
-          device_id?: string
-          disabled?: boolean
-          id?: string
-          username?: string
-        }
-        Relationships: []
-      }
       matches: {
         Row: {
           competition: string
@@ -86,6 +62,30 @@ export type Database = {
         }
         Relationships: []
       }
+      point_adjustments: {
+        Row: {
+          created_at: string
+          delta: number
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           created_at: string
@@ -125,21 +125,52 @@ export type Database = {
             referencedRelation: "matches"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "predictions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "app_users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "predictions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "leaderboard"
-            referencedColumns: ["user_id"]
-          },
         ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          disabled: boolean
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disabled?: boolean
+          id: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disabled?: boolean
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -147,20 +178,28 @@ export type Database = {
         Row: {
           accuracy: number | null
           correct_predictions: number | null
+          disabled: boolean | null
+          handle: string | null
+          name: string | null
           rank: number | null
           total_points: number | null
           total_predictions: number | null
           user_id: string | null
-          username: string | null
         }
         Relationships: []
       }
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -287,6 +326,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
