@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import {
   adminCreateMatch, adminUpdateMatch, adminDeleteMatch,
   adminSetResult, adminRecalculate,
   adminListUsers, adminToggleUser, adminListPredictions,
+  adminAdjustPoints, adminDeleteUser,
 } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,9 +29,6 @@ function AdminPage() {
 }
 
 function LoginForm() {
-  
-  console.log("URL:", process.env.SUPABASE_URL);
-  console.log("PUB:", process.env.SUPABASE_PUBLISHABLE_KEY);
   const qc = useQueryClient();
   const login = useServerFn(adminLogin);
   const [username, setUsername] = useState("");
@@ -72,15 +70,13 @@ function AdminShell() {
         <Button
           variant="outline"
           onClick={async () => { await logout(); qc.invalidateQueries({ queryKey: ["admin-me"] }); }}
-        >
-          Sign out
-        </Button>
+        >Sign out</Button>
       </div>
       <Tabs defaultValue="matches">
         <TabsList>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="results">Results</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="users">Users & Points</TabsTrigger>
           <TabsTrigger value="predictions">Predictions</TabsTrigger>
         </TabsList>
         <TabsContent value="matches"><MatchesTab /></TabsContent>
@@ -131,7 +127,7 @@ function MatchesTab() {
         </Button>
       </div>
 
-      <div className="pitch-card overflow-hidden">
+      <div className="pitch-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-background/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
@@ -142,7 +138,7 @@ function MatchesTab() {
             </tr>
           </thead>
           <tbody>
-            {(matches.data ?? []).map((m: any) => (
+            {(matches.data ?? []).map((m) => (
               <tr key={m.id} className="border-t border-border/40">
                 <td className="px-3 py-2">{m.team1_flag} {m.team1} vs {m.team2} {m.team2_flag}</td>
                 <td className="px-3 py-2">{new Date(m.kickoff).toLocaleString()}</td>
@@ -150,7 +146,7 @@ function MatchesTab() {
                   <select
                     defaultValue={m.status}
                     onChange={async (e) => {
-                      await update({ data: { id: m.id, patch: { status: e.target.value as any } } });
+                      await update({ data: { id: m.id, patch: { status: e.target.value as "upcoming" | "live" | "completed" | "cancelled" } } });
                       toast.success("Updated"); refresh();
                     }}
                     className="rounded-md border border-border bg-background px-2 py-1 text-sm"
@@ -163,7 +159,7 @@ function MatchesTab() {
                 </td>
                 <td className="px-3 py-2 text-right">
                   <Button variant="ghost" size="sm" onClick={async () => {
-                    if (!confirm("Delete this match?")) return;
+                    if (!confirm("Delete this match? Predictions will be removed.")) return;
                     await del({ data: { id: m.id } }); toast.success("Deleted"); refresh();
                   }}>Delete</Button>
                 </td>
@@ -192,7 +188,7 @@ function ResultsTab() {
         }}>Recalculate all points</Button>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        {(matches.data ?? []).filter((m: any) => m.status !== "cancelled").map((m: any) => (
+        {(matches.data ?? []).filter((m) => m.status !== "cancelled").map((m) => (
           <ResultRow key={m.id} m={m} onSubmit={async (s1, s2) => {
             await setResult({ data: { id: m.id, team1_score: s1, team2_score: s2 } });
             toast.success("Result saved & points awarded");
@@ -204,7 +200,12 @@ function ResultsTab() {
   );
 }
 
-function ResultRow({ m, onSubmit }: { m: any; onSubmit: (s1: number, s2: number) => Promise<void> }) {
+type AdminMatch = {
+  id: string; team1: string; team2: string; kickoff: string; status: string;
+  team1_score: number | null; team2_score: number | null; winner: string | null;
+};
+
+function ResultRow({ m, onSubmit }: { m: AdminMatch; onSubmit: (s1: number, s2: number) => Promise<void> }) {
   const [s1, setS1] = useState<number>(m.team1_score ?? 0);
   const [s2, setS2] = useState<number>(m.team2_score ?? 0);
   return (
@@ -222,46 +223,102 @@ function ResultRow({ m, onSubmit }: { m: any; onSubmit: (s1: number, s2: number)
   );
 }
 
+type AdminUser = {
+  id: string; user_id: string; name: string; disabled: boolean; created_at: string;
+  total_points: number; total_predictions: number; correct_predictions: number;
+};
+
 function UsersTab() {
   const qc = useQueryClient();
   const list = useServerFn(adminListUsers);
   const toggle = useServerFn(adminToggleUser);
+  const adjust = useServerFn(adminAdjustPoints);
+  const del = useServerFn(adminDeleteUser);
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => list() });
+  const refresh = () => qc.invalidateQueries({ queryKey: ["admin-users"] });
+
   return (
-    <div className="pitch-card mt-4 overflow-hidden">
+    <div className="pitch-card mt-4 overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-background/40 text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
-            <th className="px-3 py-2 text-left">Username</th>
-            <th className="px-3 py-2 text-left">Device ID</th>
+            <th className="px-3 py-2 text-left">User</th>
             <th className="px-3 py-2 text-left">Registered</th>
             <th className="px-3 py-2 text-right">Preds</th>
+            <th className="px-3 py-2 text-right">Correct</th>
             <th className="px-3 py-2 text-right">Points</th>
+            <th className="px-3 py-2 text-left">Adjust</th>
             <th className="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
-          {(users.data ?? []).map((u: any) => (
-            <tr key={u.id} className="border-t border-border/40">
-              <td className="px-3 py-2 font-medium">{u.username}{u.disabled && <span className="ml-2 text-xs text-destructive">disabled</span>}</td>
-              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{u.device_id.slice(0, 16)}…</td>
-              <td className="px-3 py-2">{new Date(u.created_at).toLocaleDateString()}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{u.total_predictions}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{u.total_points}</td>
-              <td className="px-3 py-2 text-right">
-                <Button variant="ghost" size="sm" onClick={async () => {
-                  await toggle({ data: { id: u.id, disabled: !u.disabled } });
-                  toast.success(u.disabled ? "Enabled" : "Disabled");
-                  qc.invalidateQueries({ queryKey: ["admin-users"] });
-                }}>{u.disabled ? "Enable" : "Disable"}</Button>
-              </td>
-            </tr>
+          {(users.data ?? []).map((u: AdminUser) => (
+            <UserRow key={u.id} u={u} onAdjust={async (delta, reason) => {
+              await adjust({ data: { userId: u.id, delta, reason } });
+              toast.success(`${delta >= 0 ? "+" : ""}${delta} points`);
+              refresh();
+            }} onToggle={async () => {
+              await toggle({ data: { id: u.id, disabled: !u.disabled } });
+              toast.success(u.disabled ? "Enabled" : "Disabled"); refresh();
+            }} onDelete={async () => {
+              if (!confirm(`Delete user @${u.user_id}? This removes all their predictions.`)) return;
+              await del({ data: { id: u.id } }); toast.success("User deleted"); refresh();
+            }} />
           ))}
+          {!users.isLoading && (users.data ?? []).length === 0 && (
+            <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">No users yet.</td></tr>
+          )}
         </tbody>
       </table>
     </div>
   );
 }
+
+function UserRow({
+  u, onAdjust, onToggle, onDelete,
+}: {
+  u: AdminUser;
+  onAdjust: (delta: number, reason?: string) => Promise<void>;
+  onToggle: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [delta, setDelta] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
+  return (
+    <tr className="border-t border-border/40">
+      <td className="px-3 py-2">
+        <div className="font-medium">{u.name}{u.disabled && <span className="ml-2 text-xs text-destructive">disabled</span>}</div>
+        <div className="text-xs text-muted-foreground">@{u.user_id}</div>
+      </td>
+      <td className="px-3 py-2">{new Date(u.created_at).toLocaleDateString()}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{u.total_predictions}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{u.correct_predictions}</td>
+      <td className="px-3 py-2 text-right tabular-nums font-bold">{u.total_points}</td>
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1">
+          <Input value={delta} onChange={(e) => setDelta(e.target.value)} placeholder="±N" className="w-16" />
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="reason" className="w-28" />
+          <Button size="sm" variant="outline" onClick={async () => {
+            const n = parseInt(delta, 10);
+            if (Number.isNaN(n) || n === 0) return toast.error("Enter a non-zero number");
+            await onAdjust(n, reason || undefined); setDelta(""); setReason("");
+          }}>Apply</Button>
+        </div>
+      </td>
+      <td className="px-3 py-2 text-right">
+        <Button variant="ghost" size="sm" onClick={onToggle}>{u.disabled ? "Enable" : "Disable"}</Button>
+        <Button variant="ghost" size="sm" onClick={onDelete} className="text-destructive">Delete</Button>
+      </td>
+    </tr>
+  );
+}
+
+type AdminPred = {
+  id: string; match_id: string; user_id: string; pick: string;
+  is_correct: boolean | null; points: number; created_at: string;
+  profile: { user_id: string; name: string } | null;
+  match: { team1: string; team2: string } | null;
+};
 
 function PredictionsTab() {
   const list = useServerFn(adminListPredictions);
@@ -269,8 +326,20 @@ function PredictionsTab() {
 
   const exportCsv = () => {
     const rows = preds.data ?? [];
-    const header = ["id", "match_id", "user_id", "pick", "is_correct", "points", "created_at"];
-    const csv = [header.join(","), ...rows.map((r: any) => header.map((h) => JSON.stringify(r[h] ?? "")).join(","))].join("\n");
+    const header = ["user", "match", "pick", "is_correct", "points", "created_at"];
+    const csv = [
+      header.join(","),
+      ...rows.map((r: AdminPred) =>
+        [
+          `@${r.profile?.user_id ?? r.user_id}`,
+          `${r.match?.team1 ?? "?"} vs ${r.match?.team2 ?? "?"}`,
+          r.pick,
+          r.is_correct ?? "",
+          r.points,
+          r.created_at,
+        ].map((v) => JSON.stringify(String(v))).join(","),
+      ),
+    ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -281,7 +350,7 @@ function PredictionsTab() {
   return (
     <div className="mt-4">
       <div className="mb-3 flex justify-end"><Button variant="outline" onClick={exportCsv}>Export CSV</Button></div>
-      <div className="pitch-card overflow-hidden">
+      <div className="pitch-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-background/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
@@ -293,10 +362,15 @@ function PredictionsTab() {
             </tr>
           </thead>
           <tbody>
-            {(preds.data ?? []).map((p: any) => (
+            {(preds.data ?? []).map((p: AdminPred) => (
               <tr key={p.id} className="border-t border-border/40">
-                <td className="px-3 py-2 font-mono text-xs">{p.user_id.slice(0, 8)}</td>
-                <td className="px-3 py-2 font-mono text-xs">{p.match_id.slice(0, 8)}</td>
+                <td className="px-3 py-2">
+                  {p.profile ? <>
+                    <div className="font-medium">{p.profile.name}</div>
+                    <div className="text-xs text-muted-foreground">@{p.profile.user_id}</div>
+                  </> : <span className="font-mono text-xs">{p.user_id.slice(0, 8)}</span>}
+                </td>
+                <td className="px-3 py-2">{p.match ? `${p.match.team1} vs ${p.match.team2}` : "—"}</td>
                 <td className="px-3 py-2">{p.pick}{p.is_correct === true ? " ✓" : p.is_correct === false ? " ✗" : ""}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{p.points}</td>
                 <td className="px-3 py-2">{new Date(p.created_at).toLocaleString()}</td>

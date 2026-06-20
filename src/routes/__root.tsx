@@ -12,6 +12,10 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { useSession, useAppUser } from "@/components/auth-gate";
+import { signOut } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
   return (
@@ -19,9 +23,7 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold">404</h1>
         <p className="mt-2 text-muted-foreground">Page not found.</p>
-        <Link to="/" className="mt-6 inline-block rounded-md bg-primary px-4 py-2 text-primary-foreground">
-          Go home
-        </Link>
+        <Link to="/" className="mt-6 inline-block rounded-md bg-primary px-4 py-2 text-primary-foreground">Go home</Link>
       </div>
     </div>
   );
@@ -29,18 +31,13 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
+  useEffect(() => { reportLovableError(error, { boundary: "tanstack_root_error_component" }); }, [error]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Something went wrong</h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-        <button
-          onClick={() => { router.invalidate(); reset(); }}
-          className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground"
-        >
+        <button onClick={() => { router.invalidate(); reset(); }} className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground">
           Try again
         </button>
       </div>
@@ -52,10 +49,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "FIFA Winner Predictor" },
       { name: "description", content: "Predict FIFA match winners, earn points, and climb the global leaderboard." },
-      { name: "author", content: "FIFA Winner Predictor" },
+      { name: "theme-color", content: "#0a1a14" },
       { property: "og:title", content: "FIFA Winner Predictor" },
       { property: "og:description", content: "Predict FIFA match winners and climb the leaderboard." },
       { property: "og:type", content: "website" },
@@ -77,13 +74,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
+      <head><HeadContent /></head>
+      <body>{children}<Scripts /></body>
     </html>
   );
 }
@@ -92,7 +84,7 @@ function NavLink({ to, children }: { to: string; children: ReactNode }) {
   return (
     <Link
       to={to}
-      className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:text-sm"
       activeProps={{ className: "bg-secondary text-foreground" }}
       activeOptions={{ exact: to === "/" }}
     >
@@ -103,30 +95,49 @@ function NavLink({ to, children }: { to: string; children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  const { session } = useSession();
+  const user = useAppUser(session);
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((e) => {
+      if (e === "SIGNED_IN" || e === "SIGNED_OUT" || e === "USER_UPDATED") {
+        router.invalidate();
+        if (e !== "SIGNED_OUT") queryClient.invalidateQueries();
+      }
+    });
+    return () => data.subscription.unsubscribe();
+  }, [router, queryClient]);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen">
-        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <Link to="/" className="flex items-center gap-2">
+      <div className="min-h-screen pb-[env(safe-area-inset-bottom)]">
+        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-4">
+            <Link to="/" className="flex shrink-0 items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground font-bold">⚽</span>
-              <span className="font-bold tracking-tight">
+              <span className="hidden font-bold tracking-tight sm:inline">
                 FIFA <span className="gold-text">Predictor</span>
               </span>
             </Link>
-            <nav className="flex items-center gap-1">
+            <nav className="flex flex-1 items-center justify-center gap-0.5 sm:gap-1">
               <NavLink to="/">Matches</NavLink>
-              <NavLink to="/leaderboard">Leaderboard</NavLink>
-              <NavLink to="/me">My Stats</NavLink>
+              <NavLink to="/leaderboard">Ranks</NavLink>
+              <NavLink to="/me">Me</NavLink>
               <NavLink to="/admin">Admin</NavLink>
             </nav>
+            {user ? (
+              <Button variant="ghost" size="sm" onClick={async () => { await signOut(); }} className="shrink-0 text-xs">
+                Sign out
+              </Button>
+            ) : <div className="w-[68px]" />}
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-8">
+        <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
           <Outlet />
         </main>
-        <footer className="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-muted-foreground">
-          One device · One username · One prediction profile
+        <footer className="mx-auto max-w-6xl px-4 py-6 text-center text-xs text-muted-foreground">
+          Predict. Score. Lead the table.
         </footer>
       </div>
       <Toaster richColors theme="dark" position="top-center" />

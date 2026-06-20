@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMe } from "@/lib/predictions.functions";
-import { getDeviceId } from "@/lib/device";
-import { UsernameGate, useProfile } from "@/components/username-gate";
+import { AuthGate } from "@/components/auth-gate";
 
 export const Route = createFileRoute("/me")({
   head: () => ({
@@ -16,18 +15,16 @@ export const Route = createFileRoute("/me")({
 });
 
 function MePage() {
-  const { profile, setProfile, ready } = useProfile();
-  if (!ready) return <div className="py-20 text-center text-muted-foreground">Loading…</div>;
   return (
-    <UsernameGate profile={profile} onRegistered={setProfile}>
+    <AuthGate>
       <Stats />
-    </UsernameGate>
+    </AuthGate>
   );
 }
 
 function Stats() {
   const fetchMe = useServerFn(getMe);
-  const me = useQuery({ queryKey: ["me"], queryFn: () => fetchMe({ data: { deviceId: getDeviceId() } }), refetchInterval: 20000 });
+  const me = useQuery({ queryKey: ["me"], queryFn: () => fetchMe(), refetchInterval: 20000 });
   const d = me.data;
   if (!d) return <div className="py-20 text-center text-muted-foreground">Loading…</div>;
   const tiles = [
@@ -39,8 +36,8 @@ function Stats() {
   ];
   return (
     <div>
-      <h1 className="text-3xl font-bold">{d.username}</h1>
-      <p className="mt-1 text-muted-foreground">Your prediction profile on this device.</p>
+      <h1 className="text-3xl font-bold">{d.name}</h1>
+      <p className="mt-1 text-muted-foreground">@{d.user_id}</p>
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         {tiles.map((t) => (
           <div key={t.label} className="pitch-card p-5">

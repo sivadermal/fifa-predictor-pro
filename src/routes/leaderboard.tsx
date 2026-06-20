@@ -37,12 +37,15 @@ function LeaderboardPage() {
             </tr>
           </thead>
           <tbody>
-            {(lb.data ?? []).map((r: any, i: number) => (
+            {(lb.data ?? []).map((r) => (
               <tr key={r.user_id} className="border-t border-border/40">
                 <td className="px-4 py-3 font-semibold">
-                  {r.rank <= 3 ? <span className="gold-text">#{r.rank}</span> : <>#{r.rank}</>}
+                  {r.rank && r.rank <= 3 ? <span className="gold-text">#{r.rank}</span> : <>#{r.rank}</>}
                 </td>
-                <td className="px-4 py-3">{r.username}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-muted-foreground">@{r.handle}</div>
+                </td>
                 <td className="px-4 py-3 text-right font-bold tabular-nums">{r.total_points}</td>
                 <td className="hidden px-4 py-3 text-right tabular-nums md:table-cell">{r.correct_predictions}</td>
                 <td className="hidden px-4 py-3 text-right tabular-nums md:table-cell">{r.total_predictions}</td>
