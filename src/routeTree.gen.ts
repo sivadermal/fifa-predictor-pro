@@ -14,6 +14,7 @@ import { Route as MeRouteImport } from './routes/me'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicHooksImportMatchesRouteImport } from './routes/api/public/hooks/import-matches'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -40,6 +41,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksImportMatchesRoute =
+  ApiPublicHooksImportMatchesRouteImport.update({
+    id: '/api/public/hooks/import-matches',
+    path: '/api/public/hooks/import-matches',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +54,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/me': typeof MeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/api/public/hooks/import-matches': typeof ApiPublicHooksImportMatchesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +62,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/me': typeof MeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/api/public/hooks/import-matches': typeof ApiPublicHooksImportMatchesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +71,33 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/me': typeof MeRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/api/public/hooks/import-matches': typeof ApiPublicHooksImportMatchesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/leaderboard' | '/me' | '/sitemap.xml'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/leaderboard'
+    | '/me'
+    | '/sitemap.xml'
+    | '/api/public/hooks/import-matches'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/leaderboard' | '/me' | '/sitemap.xml'
-  id: '__root__' | '/' | '/admin' | '/leaderboard' | '/me' | '/sitemap.xml'
+  to:
+    | '/'
+    | '/admin'
+    | '/leaderboard'
+    | '/me'
+    | '/sitemap.xml'
+    | '/api/public/hooks/import-matches'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/leaderboard'
+    | '/me'
+    | '/sitemap.xml'
+    | '/api/public/hooks/import-matches'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,6 +106,7 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   MeRoute: typeof MeRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiPublicHooksImportMatchesRoute: typeof ApiPublicHooksImportMatchesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +146,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/import-matches': {
+      id: '/api/public/hooks/import-matches'
+      path: '/api/public/hooks/import-matches'
+      fullPath: '/api/public/hooks/import-matches'
+      preLoaderRoute: typeof ApiPublicHooksImportMatchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -125,6 +162,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   MeRoute: MeRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiPublicHooksImportMatchesRoute: ApiPublicHooksImportMatchesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

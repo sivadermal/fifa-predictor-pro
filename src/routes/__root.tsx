@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useSession, useAppUser } from "@/components/auth-gate";
 import { signOut } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { PwaInstaller } from "@/components/pwa-installer";
 
 function NotFoundComponent() {
   return (
@@ -64,6 +65,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icon-192.png" },
+      { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" },
@@ -145,6 +149,7 @@ function RootComponent() {
         </footer>
       </div>
       <Toaster richColors theme="dark" position="top-center" />
+      <PwaInstaller />
     </QueryClientProvider>
   );
 }

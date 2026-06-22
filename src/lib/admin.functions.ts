@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { sendPushToAll } from "./push.server";
 
 function getAdmin() {
   return import("@/integrations/supabase/client.server").then((m) => m.supabaseAdmin);
@@ -113,6 +114,11 @@ export const adminSetResult = createServerFn({ method: "POST" })
       })
       .eq("id", data.id);
     if (e1) throw e1;
+    const { data: matchRow } = await sb
+      .from("matches")
+      .select("team1, team2")
+      .eq("id", data.id)
+      .maybeSingle();
     const { data: preds, error: e2 } = await sb
       .from("predictions")
       .select("id, pick")
@@ -124,6 +130,20 @@ export const adminSetResult = createServerFn({ method: "POST" })
         .from("predictions")
         .update({ is_correct: correct, points: correct ? 1 : 0 })
         .eq("id", p.id);
+    }
+    if (matchRow) {
+      try {
+        const winnerLabel =
+          winner === "draw" ? "Draw" : winner === "team1" ? matchRow.team1 : matchRow.team2;
+        await sendPushToAll({
+          title: "Result published 🏆",
+          body: `${matchRow.team1} ${data.team1_score}–${data.team2_score} ${matchRow.team2} · ${winnerLabel}`,
+          url: "/leaderboard",
+          tag: `result-${data.id}`,
+        });
+      } catch (_e) {
+        // ignore push errors
+      }
     }
     return { ok: true, winner, scored: preds?.length ?? 0 };
   });
@@ -246,3 +266,9 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     if (error) throw error;
     return { ok: true };
   });
+
+export const adminImportMatches = createServerFn({ method: "POST" }).handler(async () => {
+  await requireAdmin();
+  const { runMatchImport } = await import("./import.server");
+  return runMatchImport();
+});
