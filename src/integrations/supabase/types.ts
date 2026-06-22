@@ -18,8 +18,10 @@ export type Database = {
         Row: {
           competition: string
           created_at: string
+          external_id: string | null
           id: string
           kickoff: string
+          open_notified_at: string | null
           status: string
           team1: string
           team1_flag: string | null
@@ -28,13 +30,16 @@ export type Database = {
           team2_flag: string | null
           team2_score: number | null
           updated_at: string
+          visible_from: string | null
           winner: string | null
         }
         Insert: {
           competition?: string
           created_at?: string
+          external_id?: string | null
           id?: string
           kickoff: string
+          open_notified_at?: string | null
           status?: string
           team1: string
           team1_flag?: string | null
@@ -43,13 +48,16 @@ export type Database = {
           team2_flag?: string | null
           team2_score?: number | null
           updated_at?: string
+          visible_from?: string | null
           winner?: string | null
         }
         Update: {
           competition?: string
           created_at?: string
+          external_id?: string | null
           id?: string
           kickoff?: string
+          open_notified_at?: string | null
           status?: string
           team1?: string
           team1_flag?: string | null
@@ -58,6 +66,7 @@ export type Database = {
           team2_flag?: string | null
           team2_score?: number | null
           updated_at?: string
+          visible_from?: string | null
           winner?: string | null
         }
         Relationships: []
@@ -151,6 +160,51 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sync_state: {
+        Row: {
+          key: string
+          last_run_at: string | null
+          payload: Json | null
+        }
+        Insert: {
+          key: string
+          last_run_at?: string | null
+          payload?: Json | null
+        }
+        Update: {
+          key?: string
+          last_run_at?: string | null
+          payload?: Json | null
         }
         Relationships: []
       }
