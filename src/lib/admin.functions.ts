@@ -266,3 +266,9 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     if (error) throw error;
     return { ok: true };
   });
+
+export const adminImportMatches = createServerFn({ method: "POST" }).handler(async () => {
+  await requireAdmin();
+  const { runMatchImport } = await import("./import.server");
+  return runMatchImport();
+});

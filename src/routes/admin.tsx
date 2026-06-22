@@ -8,7 +8,7 @@ import {
   adminCreateMatch, adminUpdateMatch, adminDeleteMatch,
   adminSetResult, adminRecalculate,
   adminListUsers, adminToggleUser, adminListPredictions,
-  adminAdjustPoints, adminDeleteUser,
+  adminAdjustPoints, adminDeleteUser, adminImportMatches,
 } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,8 +110,23 @@ function MatchesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const importNow = useServerFn(adminImportMatches);
+
   return (
     <div className="mt-4 space-y-6">
+      <div className="pitch-card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <div className="font-semibold">Auto-import from Football-Data.org</div>
+          <div className="text-xs text-muted-foreground">FIFA WC, UEFA Champions League, Euros · hidden until 24h before kickoff</div>
+        </div>
+        <Button variant="outline" onClick={async () => {
+          const r = await importNow();
+          if (r.ok) toast.success(`Imported ${r.imported}, updated ${r.updated}, pushed ${r.pushed}`);
+          else toast.error(r.error ?? "Import failed");
+          qc.invalidateQueries({ queryKey: ["admin-matches"] });
+        }}>Import now</Button>
+      </div>
+
       <div className="pitch-card p-5">
         <h3 className="font-semibold">Create match</h3>
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
