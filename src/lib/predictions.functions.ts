@@ -14,9 +14,11 @@ function publicClient() {
 
 export const listMatches = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
+  const nowIso = new Date().toISOString();
   const { data, error } = await sb
     .from("matches")
     .select("*")
+    .or(`visible_from.is.null,visible_from.lte.${nowIso}`)
     .order("kickoff", { ascending: true });
   if (error) throw error;
   return data ?? [];
